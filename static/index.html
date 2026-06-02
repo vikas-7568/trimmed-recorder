@@ -741,94 +741,82 @@ function showScreen(id) {
 // ── Chip panel logic ──────────────────────────────────────────────
 function playAudio(recordingId) {
   const audio = new Audio('/api/audio/' + recordingId);
-  audio.play();
+  audio.play().catch(err => alert('Could not play: ' + err.message));
 }
 
-function fmtDur(sec) {
-  const m = Math.floor(sec / 60).toString().padStart(2, '0');
-  const s = (sec % 60).toString().padStart(2, '0');
-  return `${m}:${s}`;
+function showPanel(anchorEl, html) {
+  document.querySelectorAll('.stat-panel-fixed').forEach(p => p.remove());
+  const rect = anchorEl.getBoundingClientRect();
+  const panel = document.createElement('div');
+  panel.className = 'stat-panel-fixed';
+  panel.style.cssText = `
+    position:fixed;
+    top:${rect.bottom + 8}px;
+    left:${Math.min(rect.left, window.innerWidth - 276)}px;
+    background:#0F1F3D; border:1px solid #C0392B;
+    border-radius:12px; padding:12px; min-width:260px;
+    max-height:220px; overflow-y:auto; z-index:999;
+    font-size:13px; color:white;
+  `;
+  panel.innerHTML = html;
+  document.body.appendChild(panel);
+  setTimeout(() => {
+    document.addEventListener('click', () =>
+      document.querySelectorAll('.stat-panel-fixed').forEach(p => p.remove()),
+    { once: true });
+  }, 100);
 }
 
-function renderSessionPanel(panelEl) {
-  if (sessionRecordings.length === 0) {
-    panelEl.innerHTML = '<div class="panel-empty">No recordings this session yet</div>';
-    return;
-  }
-  panelEl.innerHTML = [...sessionRecordings].reverse().map(r =>
-    `<div class="panel-row">
-       <span class="panel-rec-id">${r.id}</span>
-       <span class="panel-dur">${fmtDur(r.duration)}</span>
-       <button class="play-btn" onclick="playAudio('${r.id}')">▶ Play</button>
-     </div>`
-  ).join('');
+function sessionPanelHtml() {
+  if (sessionRecordings.length === 0)
+    return '<p style="color:#888;margin:0;text-align:center">No recordings this session yet</p>';
+  return [...sessionRecordings].reverse().map(r => `
+    <div style="display:flex;justify-content:space-between;align-items:center;
+                padding:8px 0;border-bottom:1px solid #1e3a5f;">
+      <span style="color:#aaa;font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:8px">${r.id}</span>
+      <span style="color:#888;flex-shrink:0;margin-right:8px">${r.duration}s</span>
+      <button onclick="playAudio('${r.id}')"
+        style="background:#C0392B;border:none;color:white;
+               padding:4px 10px;border-radius:8px;cursor:pointer;font-size:11px;flex-shrink:0;">
+        ▶ Play
+      </button>
+    </div>`).join('');
 }
 
-async function renderTodayPanel(panelEl) {
-  panelEl.innerHTML = '<div class="panel-empty">Loading…</div>';
+// SAVED chip
+document.getElementById('chip-saved')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  showPanel(e.currentTarget, sessionPanelHtml());
+});
+
+// CLIP badge — same as saved
+document.getElementById('chip-clip')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  showPanel(e.currentTarget, sessionPanelHtml());
+});
+
+// TODAY chip
+document.getElementById('chip-today')?.addEventListener('click', async (e) => {
+  e.stopPropagation();
+  showPanel(e.currentTarget, '<p style="color:#888;margin:0;text-align:center">Loading…</p>');
   try {
     const res = await fetch('/api/stats');
     const d = await res.json();
     const docs = d.today_doctors || [];
+    const panel = document.querySelector('.stat-panel-fixed');
+    if (!panel) return;
     if (docs.length === 0) {
-      panelEl.innerHTML = '<div class="panel-empty">No recordings today yet</div>';
+      panel.innerHTML = '<p style="color:#888;margin:0;text-align:center">No recordings today yet</p>';
       return;
     }
-    panelEl.innerHTML = docs.map(doc =>
-      `<div class="panel-row">
-         <span class="panel-dur">${doc.doctor_id}</span>
-         <span style="flex:1;padding:0 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${doc.doctor_name}</span>
-         <span style="color:#C0392B;flex-shrink:0;font-weight:700">${doc.clips_today} clips</span>
-       </div>`
-    ).join('');
-  } catch(e) {
-    panelEl.innerHTML = '<div class="panel-empty">Could not load data</div>';
-  }
-}
-
-let openPanel = null;
-
-function togglePanel(panelEl, type) {
-  // Close any other open panel
-  if (openPanel && openPanel !== panelEl) {
-    openPanel.classList.remove('open');
-    openPanel.previousElementSibling?.classList.remove('active');
-    openPanel = null;
-  }
-  // Toggle this panel
-  if (panelEl.classList.contains('open')) {
-    panelEl.classList.remove('open');
-    panelEl.previousElementSibling?.classList.remove('active');
-    openPanel = null;
-    return;
-  }
-  if (type === 'session') renderSessionPanel(panelEl);
-  else if (type === 'today') renderTodayPanel(panelEl);
-  panelEl.classList.add('open');
-  panelEl.previousElementSibling?.classList.add('active');
-  openPanel = panelEl;
-}
-
-// Chip click listeners
-document.getElementById('chip-saved')?.addEventListener('click', (e) => {
-  e.stopPropagation();
-  togglePanel(document.getElementById('panel-saved'), 'session');
-});
-document.getElementById('chip-clip')?.addEventListener('click', (e) => {
-  e.stopPropagation();
-  togglePanel(document.getElementById('panel-clip'), 'session');
-});
-document.getElementById('chip-today')?.addEventListener('click', (e) => {
-  e.stopPropagation();
-  togglePanel(document.getElementById('panel-today'), 'today');
-});
-
-// Close panel on outside click
-document.addEventListener('click', () => {
-  if (openPanel) {
-    openPanel.previousElementSibling?.classList.remove('active');
-    openPanel.classList.remove('open');
-    openPanel = null;
+    panel.innerHTML = docs.map(doc => `
+      <div style="padding:8px 0;border-bottom:1px solid #1e3a5f;">
+        <div style="color:white;font-weight:600">${doc.doctor_name}</div>
+        <div style="color:#C0392B;font-size:11px;margin-top:2px">${doc.doctor_id} · ${doc.clips_today} clips</div>
+      </div>`).join('');
+  } catch(err) {
+    const panel = document.querySelector('.stat-panel-fixed');
+    if (panel) panel.innerHTML = '<p style="color:#888;margin:0;text-align:center">Could not load data</p>';
   }
 });
 
