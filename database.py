@@ -12,6 +12,13 @@ async def get_db():
         await db.close()
 
 
+async def _add_column_if_missing(db, table: str, column: str, col_type: str):
+    try:
+        await db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+    except Exception:
+        pass  # column already exists
+
+
 async def init_db():
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
@@ -41,4 +48,18 @@ async def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # Add new columns — safe to run repeatedly (ignored if already exist)
+        new_cols = [
+            ("doctor_id",      "TEXT"),
+            ("doctor_name",    "TEXT"),
+            ("doctor_phone",   "TEXT"),
+            ("specialization", "TEXT"),
+            ("record_date",    "TEXT"),
+            ("record_time",    "TEXT"),
+            ("audio_url",      "TEXT"),
+        ]
+        for col, col_type in new_cols:
+            await _add_column_if_missing(db, "recordings", col, col_type)
+
         await db.commit()

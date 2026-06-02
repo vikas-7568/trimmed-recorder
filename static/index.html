@@ -500,6 +500,8 @@ async function uploadRecording(blob) {
   form.append('student_name', s.name);
   form.append('student_initials', s.initials);
   form.append('phone_last4', s.phone.slice(-4));
+  form.append('student_phone', s.phone || '');
+  form.append('specialization', s.specialization || '');
   form.append('template_id', currentTemplateIndex);
   form.append('template_text', TEMPLATES[currentTemplateIndex]?.text || '');
   form.append('duration_sec', elapsedSeconds);

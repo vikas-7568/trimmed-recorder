@@ -1,4 +1,5 @@
 import time
+from datetime import datetime
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -162,6 +163,8 @@ async def upload_recording(
     student_name: str = Form(...),
     student_initials: str = Form(...),
     phone_last4: str = Form(...),
+    student_phone: str = Form(""),
+    specialization: str = Form(""),
     template_id: int = Form(...),
     template_text: str = Form(...),
     duration_sec: float = Form(...),
@@ -175,13 +178,23 @@ async def upload_recording(
         content = await audio.read()
         audio_path.write_bytes(content)
 
+        doctor_id   = f"DR-{student_phone[-6:]}" if len(student_phone) >= 6 else f"DR-{phone_last4}"
+        now         = datetime.now()
+        record_date = now.strftime("%Y-%m-%d")
+        record_time = now.strftime("%H:%M:%S")
+        audio_url   = str(audio_path)
+
         await db.execute(
             """INSERT INTO recordings
                (recording_id, student_id, student_name, template_id, template_text,
-                audio_path, duration_sec, file_size_bytes, patient_mode)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
+                audio_path, duration_sec, file_size_bytes, patient_mode,
+                doctor_id, doctor_name, doctor_phone, specialization,
+                record_date, record_time, audio_url)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (recording_id, student_id, student_name, template_id, template_text,
-             str(audio_path), duration_sec, len(content), patient_mode),
+             str(audio_path), duration_sec, len(content), patient_mode,
+             doctor_id, student_name, student_phone, specialization,
+             record_date, record_time, audio_url),
         )
         await db.execute(
             "UPDATE students SET total_recordings = total_recordings + 1 WHERE id = ?",
@@ -209,19 +222,37 @@ async def get_templates():
 @app.get("/api/stats")
 async def get_stats(db: aiosqlite.Connection = Depends(get_db)):
     try:
+        today = datetime.now().strftime("%Y-%m-%d")
+
         async with db.execute("SELECT COUNT(*) as cnt FROM recordings") as cur:
             total_recordings = (await cur.fetchone())["cnt"]
-        async with db.execute("SELECT COUNT(*) as cnt FROM students") as cur:
-            total_students = (await cur.fetchone())["cnt"]
         async with db.execute(
-            "SELECT COUNT(*) as cnt FROM recordings WHERE DATE(created_at) = DATE('now')"
+            "SELECT COUNT(DISTINCT doctor_id) as cnt FROM recordings WHERE doctor_id IS NOT NULL"
+        ) as cur:
+            total_doctors = (await cur.fetchone())["cnt"]
+        async with db.execute(
+            "SELECT COUNT(*) as cnt FROM recordings WHERE COALESCE(record_date, DATE(created_at)) = ?",
+            (today,)
         ) as cur:
             today_recordings = (await cur.fetchone())["cnt"]
+        async with db.execute(
+            """SELECT doctor_id, doctor_name, COUNT(*) as clips_today
+               FROM recordings
+               WHERE COALESCE(record_date, DATE(created_at)) = ? AND doctor_id IS NOT NULL
+               GROUP BY doctor_id, doctor_name
+               ORDER BY clips_today DESC""",
+            (today,)
+        ) as cur:
+            today_rows = await cur.fetchall()
 
         return {
-            "total_recordings": total_recordings,
-            "total_students":   total_students,
             "today_recordings": today_recordings,
+            "total_recordings": total_recordings,
+            "total_doctors":    total_doctors,
+            "today_doctors":    [
+                {"doctor_id": r["doctor_id"], "doctor_name": r["doctor_name"], "clips_today": r["clips_today"]}
+                for r in today_rows
+            ],
         }
     except Exception as e:
         print(f"Stats error: {e}")
@@ -246,6 +277,69 @@ async def admin_recordings(
     except Exception as e:
         print(f"Admin recordings error: {e}")
         raise HTTPException(status_code=500, detail="Query failed")
+
+
+@app.get("/api/doctor/{doctor_id}/recordings")
+async def get_doctor_recordings(doctor_id: str, db: aiosqlite.Connection = Depends(get_db)):
+    try:
+        async with db.execute(
+            """SELECT recording_id, doctor_name, doctor_phone, doctor_id,
+                      specialization, record_date, record_time,
+                      duration_sec, audio_url, template_text
+               FROM recordings WHERE doctor_id = ? ORDER BY created_at DESC""",
+            (doctor_id,)
+        ) as cur:
+            rows = await cur.fetchall()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        print(f"Doctor recordings error: {e}")
+        raise HTTPException(status_code=500, detail="Query failed")
+
+
+@app.get("/api/recordings/all")
+async def get_all_recordings(db: aiosqlite.Connection = Depends(get_db)):
+    try:
+        async with db.execute(
+            """SELECT recording_id, doctor_id, doctor_name, doctor_phone,
+                      specialization, record_date, record_time,
+                      duration_sec, audio_url, template_text
+               FROM recordings ORDER BY created_at DESC"""
+        ) as cur:
+            rows = await cur.fetchall()
+
+        grouped: dict = {}
+        for r in rows:
+            r = dict(r)
+            did = r["doctor_id"] or "UNKNOWN"
+            if did not in grouped:
+                grouped[did] = {
+                    "doctor_name":    r["doctor_name"],
+                    "doctor_phone":   r["doctor_phone"],
+                    "specialization": r["specialization"],
+                    "total_clips":    0,
+                    "recordings":     [],
+                }
+            grouped[did]["total_clips"] += 1
+            grouped[did]["recordings"].append(r)
+
+        return grouped
+    except Exception as e:
+        print(f"All recordings error: {e}")
+        raise HTTPException(status_code=500, detail="Query failed")
+
+
+@app.get("/api/audio/{recording_id}")
+async def get_audio(recording_id: str):
+    try:
+        audio_path = RECORDINGS_DIR / f"{recording_id}.webm"
+        if not audio_path.exists():
+            raise HTTPException(status_code=404, detail="Audio file not found")
+        return FileResponse(str(audio_path), media_type="audio/webm")
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Audio error: {e}")
+        raise HTTPException(status_code=500, detail="Audio fetch failed")
 
 
 # ── Static assets — must be last so API routes win ───────────────────────────
