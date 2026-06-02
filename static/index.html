@@ -375,7 +375,10 @@
 
   <!-- Top bar -->
   <div class="top-bar">
-    <div class="top-name" id="d-name">—</div>
+    <div>
+      <div class="top-name" id="d-name">—</div>
+      <div id="d-doctor-id" style="font-size:10px;color:#C0392B;margin-top:2px;font-weight:700;letter-spacing:0.04em;"></div>
+    </div>
     <div class="chip-wrap">
       <div class="clip-badge" id="chip-clip">Clip <span id="session-count">0</span></div>
       <div class="stat-panel right" id="panel-clip"></div>
@@ -489,7 +492,8 @@ function showRandomTemplate() {
 
 function generateRecordingId() {
   const s = JSON.parse(localStorage.getItem('trikmed_student'));
-  return `REC-${s.initials}-${s.phone.slice(-4)}-${Date.now()}`;
+  const did = s.doctor_id || ('DR-' + s.phone.slice(-6));
+  return `${did}-${Date.now()}`;
 }
 
 let currentId = '';
@@ -554,6 +558,7 @@ async function uploadRecording(blob) {
   form.append('student_initials', s.initials);
   form.append('phone_last4', s.phone.slice(-4));
   form.append('student_phone', s.phone || '');
+  form.append('doctor_id', s.doctor_id || ('DR-' + (s.phone || '').slice(-6)));
   form.append('specialization', s.specialization || '');
   form.append('template_id', currentTemplateIndex);
   form.append('template_text', TEMPLATES[currentTemplateIndex]?.text || '');
@@ -682,8 +687,10 @@ document.getElementById('register-form')?.addEventListener('submit', async (e) =
     });
     const data = await res.json();
     data.patient_mode = patient ? 1 : 0;
+    data.doctor_id = 'DR-' + phone.slice(-6);
     localStorage.setItem('trikmed_student', JSON.stringify(data));
     document.getElementById('d-name').textContent = data.name;
+    document.getElementById('d-doctor-id').textContent = data.doctor_id;
     document.getElementById('saved-count').textContent = data.total_recordings || 0;
     showScreen('screen-record');
     loadTemplates();
@@ -850,7 +857,9 @@ const _savedStudent = localStorage.getItem('trikmed_student');
 if (_savedStudent) {
   try {
     const s = JSON.parse(_savedStudent);
+    if (!s.doctor_id && s.phone) { s.doctor_id = 'DR-' + s.phone.slice(-6); localStorage.setItem('trikmed_student', JSON.stringify(s)); }
     document.getElementById('d-name').textContent = s.name;
+    document.getElementById('d-doctor-id').textContent = s.doctor_id || '';
     document.getElementById('saved-count').textContent = s.total_recordings || 0;
     showScreen('screen-record');
     loadTemplates();

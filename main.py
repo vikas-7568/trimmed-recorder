@@ -164,6 +164,7 @@ async def upload_recording(
     student_initials: str = Form(...),
     phone_last4: str = Form(...),
     student_phone: str = Form(""),
+    doctor_id: str = Form(""),
     specialization: str = Form(""),
     template_id: int = Form(...),
     template_text: str = Form(...),
@@ -172,13 +173,15 @@ async def upload_recording(
     db: aiosqlite.Connection = Depends(get_db),
 ):
     try:
-        recording_id = f"REC-{student_initials}-{phone_last4}-{int(time.time() * 1000)}"
+        # Use doctor_id from client if provided, otherwise derive from phone
+        if not doctor_id:
+            doctor_id = f"DR-{student_phone[-6:]}" if len(student_phone) >= 6 else f"DR-{phone_last4}"
+        ts           = int(time.time() * 1000)
+        recording_id = f"{doctor_id}-{ts}"
         audio_path   = RECORDINGS_DIR / f"{recording_id}.webm"
 
         content = await audio.read()
         audio_path.write_bytes(content)
-
-        doctor_id   = f"DR-{student_phone[-6:]}" if len(student_phone) >= 6 else f"DR-{phone_last4}"
         now         = datetime.now()
         record_date = now.strftime("%Y-%m-%d")
         record_time = now.strftime("%H:%M:%S")
