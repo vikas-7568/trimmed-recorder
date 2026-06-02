@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="hi">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -164,6 +164,10 @@
     }
     .btn-next:active { color: #94a3b8; }
     .tmpl-text { font-size: 15px; line-height: 1.7; color: white; }
+    .tmpl-note {
+      font-size: 11px; color: #4a6080; margin-top: 10px;
+      line-height: 1.5; font-style: italic;
+    }
 
     /* ── Waveform ────────────────────────────────────────────────── */
     .waveform {
@@ -257,13 +261,13 @@
     </div>
   </div>
 
-  <h2>Apni info bharo</h2>
+  <h2>Enter Your Details</h2>
 
   <!-- id="register-form" lets the new JS use a submit event listener -->
   <form id="register-form">
 
     <div class="field">
-      <div class="field-label">Naam</div>
+      <div class="field-label">Full Name</div>
       <input type="text" id="inp-name" placeholder="Dr. Rahul Kumar"
              autocomplete="name" autocapitalize="words" autocorrect="off">
     </div>
@@ -290,8 +294,8 @@
 
     <div class="toggle-row">
       <div>
-        <div class="t-title">Patient bhi saath mein hain?</div>
-        <div class="t-sub">Patient ki baat bhi record hogi — zyada valuable data</div>
+        <div class="t-title">Recording with patient present?</div>
+        <div class="t-sub">Captures real doctor-patient conversation — higher quality data</div>
       </div>
       <label class="sw">
         <input type="checkbox" id="patient-toggle">
@@ -301,7 +305,7 @@
     </div>
 
     <button type="submit" class="btn-primary" id="btn-reg">
-      Recording Shuru Karo →
+      Start Recording Session →
     </button>
 
   </form>
@@ -330,11 +334,12 @@
   <div class="tmpl-card">
     <div class="tmpl-header">
       <span class="tmpl-label-text">
-        📋 Template #<span id="template-num">1</span> — Zor se padho:
+        📋 Example Template #<span id="template-num">1</span>
       </span>
       <button class="btn-next" id="next-template-btn">Next →</button>
     </div>
     <div class="tmpl-text" id="template-text">Loading…</div>
+    <div class="tmpl-note">This is an example only. Speak naturally in your own words — do not read this verbatim.</div>
   </div>
 
   <!-- Waveform: 20 bars built by JS -->
@@ -355,7 +360,7 @@
   </div>
 
   <!-- Status + recording ID -->
-  <div class="status-line" id="status-text" style="color:#4a6080;">Taiyar hain</div>
+  <div class="status-line" id="status-text" style="color:#4a6080;">Ready</div>
   <div class="rec-id" id="rec-id">—</div>
 
   <!-- Change user (click handled by event listener in JS) -->
@@ -427,7 +432,7 @@ async function toggleRecording() {
   if (!isRecording) {
     // CHECK BROWSER SUPPORT
     if (!navigator.mediaDevices || !window.MediaRecorder) {
-      alert('Chrome browser use karo'); return;
+      alert('Please use Chrome browser'); return;
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -461,8 +466,8 @@ async function toggleRecording() {
       }, 1000);
       setUIState('recording');
     } catch(err) {
-      if (err.name === 'NotAllowedError') alert('Microphone permission do — Settings mein jaao');
-      else alert('Microphone nahi mila, dobara try karo');
+      if (err.name === 'NotAllowedError') alert('Please allow microphone access in Settings');
+      else alert('Microphone not found, please try again');
       setUIState('idle');
     }
   } else {
@@ -493,6 +498,8 @@ async function uploadRecording(blob) {
     document.getElementById('session-count').textContent = sessionCount;
     setUIState('saved');
     setTimeout(() => {
+      isRecording = false;
+      chunks = [];
       showRandomTemplate();
       currentId = generateRecordingId();
       document.getElementById('rec-id').textContent = currentId;
@@ -526,11 +533,14 @@ function setUIState(state) {
   const waves  = document.querySelectorAll('.wave-bar');
 
   if (state === 'idle') {
-    document.getElementById('rec-icon').innerHTML = MIC_SVG; // ← fixed placeholder
-    btn.style.background = '#C0392B';
+    document.getElementById('rec-icon').innerHTML = MIC_SVG;
     btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.style.pointerEvents = 'auto';
+    btn.style.cursor = 'pointer';
+    btn.style.background = '#C0392B';
     label.textContent = 'Tap to Record';
-    status.textContent = 'Taiyar hain';
+    status.textContent = 'Ready';
     status.style.color = '#7f8c8d';
     timer.style.color = 'white';
     pulse.classList.remove('on');
@@ -540,7 +550,7 @@ function setUIState(state) {
     btn.style.background = '#C0392B';
     btn.disabled = false;
     label.textContent = 'Tap to Stop';
-    status.textContent = '● Bol rahe hain...';
+    status.textContent = '● Recording...';
     status.style.color = '#C0392B';
     timer.style.color = '#C0392B';
     pulse.classList.add('on');
@@ -549,10 +559,12 @@ function setUIState(state) {
       w.style.animation = `wave${i%5} 0.${5+i%4}s ease-in-out infinite alternate`;
     });
   } else if (state === 'saving') {
-    btn.style.background = '#7f8c8d';
     btn.disabled = true;
+    btn.style.opacity = '0.6';
+    btn.style.pointerEvents = 'none';
+    btn.style.background = '#7f8c8d';
     label.textContent = '';
-    status.textContent = '↑ Save ho raha hai...';
+    status.textContent = '↑ Saving...';
     status.style.color = '#f39c12';
     pulse.classList.remove('on');
     waves.forEach(w => { w.style.animation = 'none'; w.style.height = '8px'; w.style.background = '#1e3a5f'; });
@@ -599,8 +611,8 @@ document.getElementById('register-form')?.addEventListener('submit', async (e) =
     loadTemplates();
     updateStats();
   } catch(e) {
-    alert('Server se connect nahi ho paya. Backend chal raha hai?');
-    btn.disabled = false; btn.textContent = 'Recording Shuru Karo →';
+    alert('Could not connect to server. Is the backend running?');
+    btn.disabled = false; btn.textContent = 'Start Recording Session →';
   }
 });
 
@@ -631,7 +643,7 @@ document.getElementById('change-user-btn')?.addEventListener('click', () => {
   document.getElementById('rec-id').textContent = '—';
   document.getElementById('session-count').textContent = '0';
   document.getElementById('btn-reg').disabled = false;
-  document.getElementById('btn-reg').textContent = 'Recording Shuru Karo →';
+  document.getElementById('btn-reg').textContent = 'Start Recording Session →';
   showScreen('screen-register');
 });
 
