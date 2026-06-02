@@ -618,7 +618,8 @@ function setUIState(state) {
   const waves  = document.querySelectorAll('.wave-bar');
 
   if (state === 'idle') {
-    document.getElementById('rec-icon').innerHTML = MIC_SVG;
+    const iconEl = document.getElementById('rec-icon');
+    if (iconEl) iconEl.innerHTML = MIC_SVG;
     btn.disabled = false;
     btn.style.opacity = '1';
     btn.style.pointerEvents = 'auto';
@@ -631,7 +632,7 @@ function setUIState(state) {
     pulse.classList.remove('on');
     waves.forEach(w => { w.style.animation = 'none'; w.style.height = '8px'; w.style.background = '#1e3a5f'; });
   } else if (state === 'recording') {
-    btn.innerHTML = '<div style="width:26px;height:26px;background:white;border-radius:5px;"></div>';
+    document.getElementById('rec-icon').innerHTML = '<div style="width:26px;height:26px;background:white;border-radius:5px;"></div>';
     btn.style.background = '#C0392B';
     btn.disabled = false;
     label.textContent = 'Tap to Stop';
