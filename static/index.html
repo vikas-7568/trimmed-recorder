@@ -441,13 +441,43 @@ document.getElementById('c-today').addEventListener('click',async e=>{
     if(!p)return;
     const docs=d.today_doctors||[];
     p.innerHTML=docs.length
-      ?docs.map(x=>'<div class="pr-doc"><div class="pr-doc-n">'+x.doctor_name+'</div><div class="pr-doc-s">'+x.doctor_id+' \xb7 '+x.clips_today+' clips</div></div>').join('')
+      ?docs.map(x=>
+        '<div class="pr-doc" style="cursor:pointer" onclick="showDrRecs(\''+x.doctor_id+'\',\''+x.doctor_name.replace(/'/g,"\\'")+ '\',this)">'+
+        '<div class="pr-doc-n">'+x.doctor_name+' <span style="color:#4a6080;font-size:10px">▶ tap</span></div>'+
+        '<div class="pr-doc-s">'+x.doctor_id+' \xb7 '+x.clips_today+' clips</div>'+
+        '</div>').join('')
       :'<div class="pr-empty">No recordings today yet</div>';
   }catch(err){
     const p=document.getElementById('ov').querySelector('.pop');
     if(p)p.innerHTML='<div class="pr-empty">Could not load</div>';
   }
 });
+
+async function showDrRecs(doctorId,doctorName,rowEl){
+  rowEl.innerHTML='<div style="color:#4a6080;font-size:11px">Loading '+doctorName+'...</div>';
+  try{
+    const recs=await fetch('/api/doctor/'+doctorId+'/recordings').then(r=>r.json());
+    const ov=document.getElementById('ov');
+    const p=ov.querySelector('.pop');
+    if(!p)return;
+    p.innerHTML=
+      '<div style="font-size:11px;color:#C0392B;font-weight:700;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #1e3a5f">'+
+      doctorName+' — '+recs.length+' recordings</div>'+
+      (recs.length
+        ?recs.map(r=>
+          '<div class="pr">'+
+          '<div style="flex:1;min-width:0">'+
+          '<div style="color:#aaa;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+r.id+'</div>'+
+          '<div style="color:#4a6080;font-size:10px;margin-top:2px">'+(r.date||'')+' '+(r.time||'')+' \xb7 '+(r.duration||0)+'s</div>'+
+          '</div>'+
+          '<button class="pr-play" onclick="play(\''+r.id+'\')">&#9654; Play</button>'+
+          '</div>').join('')
+        :'<div class="pr-empty">No recordings found</div>');
+  }catch(e){
+    const p=document.getElementById('ov').querySelector('.pop');
+    if(p)p.innerHTML='<div class="pr-empty">Could not load</div>';
+  }
+}
 
 document.getElementById('rbtn').addEventListener('click',toggle);
 document.addEventListener('keydown',e=>{

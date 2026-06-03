@@ -111,4 +111,16 @@ async def stats():
                 "today_doctors":[{"doctor_id":r[0],"doctor_name":r[1],
                 "clips_today":r[2]} for r in docs]}
 
+@app.get("/api/doctor/{doctor_id}/recordings")
+async def doctor_recordings(doctor_id: str):
+    async with aiosqlite.connect(DB) as db:
+        rows = await (await db.execute("""
+            SELECT recording_id, duration_sec, record_date,
+            record_time, template_text
+            FROM recordings WHERE doctor_id=?
+            ORDER BY created_at DESC LIMIT 50
+        """, (doctor_id,))).fetchall()
+        return [{"id":r[0],"duration":r[1],"date":r[2],
+                 "time":r[3],"template":r[4]} for r in rows]
+
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
