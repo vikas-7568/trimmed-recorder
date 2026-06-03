@@ -4,8 +4,11 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from datetime import datetime
-from database import init_db, DB
+from database import init_db, DB, RECORDINGS_DIR
+from dotenv import load_dotenv
 import aiosqlite, os, time
+
+load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app):
@@ -16,7 +19,7 @@ app = FastAPI(lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"],
     allow_methods=["*"], allow_headers=["*"])
 
-ADMIN_PASSWORD = "trikmed@admin2026"
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "trikmed@admin2026")
 
 TEMPLATES = [
     {"id":1,"text":"Dolo 650 do baar roz, khana ke baad, 5 din. Pantop 40 subah khali pet. ORS teen baar roz."},
@@ -73,7 +76,7 @@ async def upload(
     patient_mode: int = Form(0),
 ):
     rid = (doctor_id or "DR-000000") + "-" + str(int(time.time()*1000))
-    path = f"recordings/{rid}.webm"
+    path = f"{RECORDINGS_DIR}/{rid}.webm"
     with open(path, "wb") as f:
         f.write(await audio.read())
     today = datetime.now().strftime("%Y-%m-%d")
@@ -95,7 +98,7 @@ async def upload(
 @app.get("/api/audio/{rid}")
 async def audio(rid: str):
     for ext in [".webm",".mp3",".wav"]:
-        p = f"recordings/{rid}{ext}"
+        p = f"{RECORDINGS_DIR}/{rid}{ext}"
         if os.path.exists(p): return FileResponse(p)
     raise HTTPException(404)
 

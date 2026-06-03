@@ -1,10 +1,13 @@
 import aiosqlite, os
-from datetime import datetime
+from dotenv import load_dotenv
 
-DB = "trikmed.db"
+load_dotenv()
+
+DB = os.getenv("DB_PATH", "trikmed.db")
+RECORDINGS_DIR = os.getenv("RECORDINGS_DIR", "recordings")
 
 async def init_db():
-    os.makedirs("recordings", exist_ok=True)
+    os.makedirs(RECORDINGS_DIR, exist_ok=True)
     async with aiosqlite.connect(DB) as db:
         await db.execute("""CREATE TABLE IF NOT EXISTS students (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
