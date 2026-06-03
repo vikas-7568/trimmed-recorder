@@ -3,10 +3,12 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from database import init_db, DB, RECORDINGS_DIR
 from dotenv import load_dotenv
-import aiosqlite, os, time
+import aiosqlite, os, time, smtplib, random, string
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 load_dotenv()
 
@@ -20,6 +22,39 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"],
     allow_methods=["*"], allow_headers=["*"])
 
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "trikmed@admin2026")
+GMAIL_USER = os.getenv("GMAIL_USER", "")
+GMAIL_PASS = os.getenv("GMAIL_APP_PASSWORD", "")
+OTP_EXPIRE = int(os.getenv("OTP_EXPIRE_MINUTES", "10"))
+
+def send_otp_email(to_email: str, otp: str, doctor_name: str):
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"TrikMed Registration OTP: {otp}"
+    msg["From"] = GMAIL_USER
+    msg["To"] = to_email
+    html = f"""
+    <div style="font-family:sans-serif;max-width:400px;margin:0 auto;
+      background:#0F1F3D;color:white;padding:30px;border-radius:12px">
+      <div style="background:#C0392B;width:44px;height:44px;
+        border-radius:9px;display:flex;align-items:center;
+        justify-content:center;font-size:22px;font-weight:900;
+        margin-bottom:20px">T</div>
+      <h2 style="margin:0 0 8px">Welcome to TrikMed</h2>
+      <p style="color:#94a3b8;margin:0 0 24px">Hello Dr. {doctor_name},</p>
+      <div style="background:#152843;border-radius:10px;
+        padding:20px;text-align:center;margin-bottom:20px">
+        <div style="color:#94a3b8;font-size:12px;margin-bottom:8px">YOUR ONE-TIME PASSWORD</div>
+        <div style="font-size:36px;font-weight:900;
+          letter-spacing:8px;color:#C0392B">{otp}</div>
+        <div style="color:#4a6080;font-size:11px;margin-top:8px">
+          Valid for {OTP_EXPIRE} minutes</div>
+      </div>
+      <p style="color:#4a6080;font-size:12px;margin:0">
+        If you did not request this, ignore this email.</p>
+    </div>"""
+    msg.attach(MIMEText(html, "html"))
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
+        s.login(GMAIL_USER, GMAIL_PASS)
+        s.sendmail(GMAIL_USER, to_email, msg.as_string())
 
 TEMPLATES = [
     {"id":1,"text":"Dolo 650 do baar roz, khana ke baad, 5 din. Pantop 40 subah khali pet. ORS teen baar roz."},
@@ -211,5 +246,71 @@ async def doctor_recordings(doctor_id: str):
         """, (doctor_id,))).fetchall()
         return [{"id":r[0],"duration":r[1],"date":r[2],
                  "time":r[3],"template":r[4]} for r in rows]
+
+@app.post("/api/send-otp")
+async def send_otp(data: dict):
+    email = data.get("email","").strip().lower()
+    phone = data.get("phone","").strip()
+    name  = data.get("name","").strip()
+    if not email or not phone or not name:
+        raise HTTPException(400, "Required fields missing")
+    async with aiosqlite.connect(DB) as db:
+        db.row_factory = aiosqlite.Row
+        existing = await (await db.execute(
+            "SELECT * FROM students WHERE phone=? AND otp_verified=1",
+            (phone,))).fetchone()
+        if existing:
+            return {"already_registered": True, "student": dict(existing)}
+    otp = ''.join(random.choices(string.digits, k=6))
+    expires = (datetime.now() + timedelta(minutes=OTP_EXPIRE)).strftime("%Y-%m-%d %H:%M:%S")
+    async with aiosqlite.connect(DB) as db:
+        await db.execute("DELETE FROM otp_store WHERE phone=?", (phone,))
+        await db.execute(
+            "INSERT INTO otp_store (email,phone,otp,expires_at) VALUES (?,?,?,?)",
+            (email, phone, otp, expires))
+        await db.commit()
+    try:
+        send_otp_email(email, otp, name)
+    except Exception as e:
+        raise HTTPException(500, f"Email failed: {str(e)}")
+    masked = email[:3] + "***" + email[email.index('@'):]
+    return {"sent": True, "email": masked}
+
+@app.post("/api/verify-otp")
+async def verify_otp(data: dict):
+    phone = data.get("phone","").strip()
+    otp   = data.get("otp","").strip()
+    name  = data.get("name","").strip()
+    email = data.get("email","").strip().lower()
+    spec  = data.get("specialization","")
+    pm    = 1 if data.get("patient_mode") else 0
+    async with aiosqlite.connect(DB) as db:
+        db.row_factory = aiosqlite.Row
+        row = await (await db.execute("""
+            SELECT * FROM otp_store
+            WHERE phone=? AND otp=? AND used=0
+            AND expires_at > datetime('now','localtime')
+            ORDER BY id DESC LIMIT 1""",
+            (phone, otp))).fetchone()
+        if not row:
+            raise HTTPException(400, "Invalid or expired OTP")
+        await db.execute("UPDATE otp_store SET used=1 WHERE id=?", (row["id"],))
+        initials = "".join(w[0].upper() for w in name.split() if w)[:3]
+        existing = await (await db.execute(
+            "SELECT * FROM students WHERE phone=?", (phone,))).fetchone()
+        if existing:
+            await db.execute(
+                "UPDATE students SET otp_verified=1, email=? WHERE phone=?",
+                (email, phone))
+        else:
+            await db.execute("""
+                INSERT INTO students
+                (name,phone,initials,specialization,patient_mode,email,otp_verified)
+                VALUES (?,?,?,?,?,?,1)""",
+                (name, phone, initials, spec, pm, email))
+        await db.commit()
+        student = await (await db.execute(
+            "SELECT * FROM students WHERE phone=?", (phone,))).fetchone()
+        return dict(student)
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

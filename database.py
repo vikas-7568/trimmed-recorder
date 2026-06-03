@@ -15,6 +15,8 @@ async def init_db():
             initials TEXT, specialization TEXT,
             patient_mode INTEGER DEFAULT 0,
             total_recordings INTEGER DEFAULT 0,
+            email TEXT,
+            otp_verified INTEGER DEFAULT 0,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP)""")
         await db.execute("""CREATE TABLE IF NOT EXISTS recordings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,4 +27,20 @@ async def init_db():
             patient_mode INTEGER DEFAULT 0,
             record_date TEXT, record_time TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP)""")
+        await db.execute("""CREATE TABLE IF NOT EXISTS otp_store (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL,
+            phone TEXT NOT NULL,
+            otp TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            used INTEGER DEFAULT 0)""")
+        # Migrate existing DB — silently skip if columns already exist
+        for col_sql in [
+            "ALTER TABLE students ADD COLUMN email TEXT",
+            "ALTER TABLE students ADD COLUMN otp_verified INTEGER DEFAULT 0",
+        ]:
+            try:
+                await db.execute(col_sql)
+            except Exception:
+                pass
         await db.commit()

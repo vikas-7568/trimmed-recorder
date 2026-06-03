@@ -141,8 +141,10 @@ select option{background:#152843}
       <div class="logo-s">Voice Data Collection</div>
     </div>
   </div>
-  <h2>Enter Your Details</h2>
-  <form id="reg-form">
+  <h2>Register</h2>
+
+  <!-- Step 1: Details -->
+  <div id="step-details">
     <div class="field">
       <div class="lbl">Full Name</div>
       <input id="i-name" type="text" placeholder="Dr. Rahul Kumar"
@@ -152,6 +154,11 @@ select option{background:#152843}
       <div class="lbl">Phone Number</div>
       <input id="i-phone" type="tel" placeholder="10-digit number"
         maxlength="10" inputmode="numeric">
+    </div>
+    <div class="field">
+      <div class="lbl">Email Address</div>
+      <input id="i-email" type="email" placeholder="your@email.com"
+        autocomplete="email" autocapitalize="none" autocorrect="off">
     </div>
     <div class="field">
       <div class="lbl">Specialization</div>
@@ -190,10 +197,28 @@ select option{background:#152843}
         <span class="sw-th"></span>
       </label>
     </div>
-    <button type="submit" class="btn-p" id="btn-reg">
-      Start Recording Session →
-    </button>
-  </form>
+    <button class="btn-p" id="btn-send-otp">Send OTP →</button>
+  </div>
+
+  <!-- Step 2: OTP -->
+  <div id="step-otp" style="display:none">
+    <div class="otp-sent-msg" style="color:#94a3b8;font-size:13px;
+      text-align:center;margin-bottom:24px;line-height:1.5">
+      OTP sent to your email
+    </div>
+    <div class="field">
+      <div class="lbl">Enter 6-digit OTP</div>
+      <input id="i-otp" type="text" inputmode="numeric" maxlength="6"
+        placeholder="——————"
+        style="font-size:32px;text-align:center;letter-spacing:8px">
+    </div>
+    <button class="btn-p" id="btn-verify-otp">Verify &amp; Register →</button>
+    <div style="display:flex;justify-content:center;gap:24px;margin-top:14px">
+      <button class="btn-ch" id="btn-back-otp">← Change details</button>
+      <button class="btn-ch" id="btn-resend">Resend OTP</button>
+    </div>
+  </div>
+
   <div style="text-align:center;margin-top:20px">
     <button class="btn-ch" id="btn-go-admin">Admin Panel</button>
   </div>
@@ -285,6 +310,7 @@ const SQ='<div style="width:24px;height:24px;background:white;border-radius:4px"
 const T=[];
 let tIdx=0,sCount=0,secs=0,tid=null,chunks=[],mr=null,recOn=false,cid='';
 const saved=[];
+let regData={};
 
 async function loadT(){
   try{
@@ -527,28 +553,70 @@ document.addEventListener('keydown',e=>{
 });
 document.getElementById('btn-nxt').addEventListener('click',()=>{if(!recOn)nextT();});
 
-document.getElementById('reg-form').addEventListener('submit',async e=>{
-  e.preventDefault();
+document.getElementById('btn-send-otp').addEventListener('click',async()=>{
   const name=document.getElementById('i-name').value.trim();
   const phone=document.getElementById('i-phone').value.trim();
+  const email=document.getElementById('i-email').value.trim();
   const spec=document.getElementById('i-spec').value;
   const pat=document.getElementById('i-pat').checked;
-  if(!name||!phone){alert('Name and phone required');return;}
-  const btn=document.getElementById('btn-reg');
-  btn.disabled=true;btn.textContent='Loading…';
+  if(!name||!phone||!email){alert('All fields required');return;}
+  if(phone.length!==10){alert('Enter valid 10-digit phone');return;}
+  const btn=document.getElementById('btn-send-otp');
+  btn.disabled=true;btn.textContent='Sending OTP…';
   try{
-    const d=await fetch('/api/register',{
+    const d=await fetch('/api/send-otp',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({name,phone,specialization:spec,patient_mode:pat})
-    }).then(r=>r.json());
-    d.patient_mode=pat?1:0;
-    d.doctor_id='DR-'+phone.slice(-6);
+      body:JSON.stringify({name,phone,email,specialization:spec,patient_mode:pat})
+    }).then(r=>{if(!r.ok)return r.json().then(e=>{throw new Error(e.detail||'Error');});return r.json();});
+    if(d.already_registered){
+      const s=d.student;
+      s.doctor_id='DR-'+phone.slice(-6);
+      s.patient_mode=pat?1:0;
+      localStorage.setItem('tmu',JSON.stringify(s));
+      go2(s);return;
+    }
+    regData={name,phone,email,spec,pat};
+    document.getElementById('step-details').style.display='none';
+    document.getElementById('step-otp').style.display='block';
+    document.querySelector('#step-otp .otp-sent-msg').textContent='OTP sent to '+d.email;
+    document.getElementById('i-otp').value='';
+    document.getElementById('i-otp').focus();
+  }catch(e){
+    alert('Could not send OTP: '+e.message);
+    btn.disabled=false;btn.textContent='Send OTP →';
+  }
+});
+
+document.getElementById('btn-verify-otp').addEventListener('click',async()=>{
+  const otp=document.getElementById('i-otp').value.trim();
+  if(otp.length!==6){alert('Enter 6-digit OTP');return;}
+  const btn=document.getElementById('btn-verify-otp');
+  btn.disabled=true;btn.textContent='Verifying…';
+  try{
+    const d=await fetch('/api/verify-otp',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({...regData,otp})
+    }).then(r=>{if(!r.ok)return r.json().then(e=>{throw new Error(e.detail||'Error');});return r.json();});
+    d.doctor_id='DR-'+regData.phone.slice(-6);
+    d.patient_mode=regData.pat?1:0;
     localStorage.setItem('tmu',JSON.stringify(d));
     go2(d);
-  }catch(err){
-    alert('Cannot connect to server');
-    btn.disabled=false;btn.textContent='Start Recording Session →';
+  }catch(e){
+    alert('Wrong or expired OTP. Try again.');
+    btn.disabled=false;btn.textContent='Verify & Register →';
   }
+});
+
+document.getElementById('btn-back-otp').addEventListener('click',()=>{
+  document.getElementById('step-otp').style.display='none';
+  document.getElementById('step-details').style.display='block';
+  const btn=document.getElementById('btn-send-otp');
+  btn.disabled=false;btn.textContent='Send OTP →';
+});
+
+document.getElementById('btn-resend').addEventListener('click',()=>{
+  document.getElementById('btn-back-otp').click();
+  setTimeout(()=>document.getElementById('btn-send-otp').click(),100);
 });
 
 document.getElementById('btn-ch').addEventListener('click',()=>{
@@ -561,8 +629,10 @@ document.getElementById('btn-ch').addEventListener('click',()=>{
   document.getElementById('rid').textContent='—';
   document.getElementById('n-clip').textContent='0';
   document.getElementById('n-saved').textContent='0';
-  const b=document.getElementById('btn-reg');
-  b.disabled=false;b.textContent='Start Recording Session →';
+  document.getElementById('step-otp').style.display='none';
+  document.getElementById('step-details').style.display='block';
+  const b=document.getElementById('btn-send-otp');
+  b.disabled=false;b.textContent='Send OTP →';
   show('s1');
 });
 
