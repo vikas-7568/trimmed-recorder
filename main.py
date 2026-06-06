@@ -6,9 +6,8 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from database import init_db, DB, RECORDINGS_DIR
 from dotenv import load_dotenv
-import aiosqlite, os, time, smtplib, random, string
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import aiosqlite, os, time, random, string
+import resend
 
 load_dotenv()
 
@@ -22,39 +21,37 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"],
     allow_methods=["*"], allow_headers=["*"])
 
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "trikmed@admin2026")
-GMAIL_USER = os.getenv("GMAIL_USER", "")
-GMAIL_PASS = os.getenv("GMAIL_APP_PASSWORD", "")
 OTP_EXPIRE = int(os.getenv("OTP_EXPIRE_MINUTES", "10"))
 
 def send_otp_email(to_email: str, otp: str, doctor_name: str):
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"TrikMed Registration OTP: {otp}"
-    msg["From"] = GMAIL_USER
-    msg["To"] = to_email
-    html = f"""
-    <div style="font-family:sans-serif;max-width:400px;margin:0 auto;
-      background:#0F1F3D;color:white;padding:30px;border-radius:12px">
-      <div style="background:#C0392B;width:44px;height:44px;
-        border-radius:9px;display:flex;align-items:center;
-        justify-content:center;font-size:22px;font-weight:900;
-        margin-bottom:20px">T</div>
-      <h2 style="margin:0 0 8px">Welcome to TrikMed</h2>
-      <p style="color:#94a3b8;margin:0 0 24px">Hello Dr. {doctor_name},</p>
-      <div style="background:#152843;border-radius:10px;
-        padding:20px;text-align:center;margin-bottom:20px">
-        <div style="color:#94a3b8;font-size:12px;margin-bottom:8px">YOUR ONE-TIME PASSWORD</div>
-        <div style="font-size:36px;font-weight:900;
-          letter-spacing:8px;color:#C0392B">{otp}</div>
-        <div style="color:#4a6080;font-size:11px;margin-top:8px">
-          Valid for {OTP_EXPIRE} minutes</div>
-      </div>
-      <p style="color:#4a6080;font-size:12px;margin:0">
-        If you did not request this, ignore this email.</p>
-    </div>"""
-    msg.attach(MIMEText(html, "html"))
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
-        s.login(GMAIL_USER, GMAIL_PASS)
-        s.sendmail(GMAIL_USER, to_email, msg.as_string())
+    resend.api_key = os.getenv("RESEND_API_KEY")
+    resend.Emails.send({
+        "from": "TrikMed <noreply@trikmed.com>",
+        "to": to_email,
+        "subject": f"Your TrikMed verification code: {otp}",
+        "html": f"""
+        <div style="font-family:sans-serif;max-width:400px;
+          margin:0 auto;padding:30px">
+          <div style="background:#0F1F3D;padding:20px;
+            border-radius:12px;text-align:center;margin-bottom:20px">
+            <span style="color:white;font-size:24px;font-weight:900">
+              TrikMed</span>
+          </div>
+          <p>Hi Dr. {doctor_name},</p>
+          <div style="background:#f8f8f8;border-radius:12px;
+            padding:24px;text-align:center;margin:20px 0">
+            <p style="color:#666;font-size:13px;margin:0 0 8px">
+              YOUR VERIFICATION CODE</p>
+            <p style="font-size:42px;font-weight:900;
+              color:#C0392B;letter-spacing:8px;margin:0">
+              {otp}</p>
+            <p style="color:#999;font-size:12px;margin:8px 0 0">
+              Valid for 10 minutes</p>
+          </div>
+          <p style="color:#999;font-size:12px">
+            If you did not request this, ignore this email.</p>
+        </div>"""
+    })
 
 TEMPLATES = [
     {"id":1,"text":"Dolo 650 do baar roz, khana ke baad, 5 din. Pantop 40 subah khali pet. ORS teen baar roz."},
