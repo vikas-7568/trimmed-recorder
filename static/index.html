@@ -650,6 +650,7 @@ document.getElementById('btn-ch').addEventListener('click',()=>{
 function show(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
+  history.pushState({screen:id},'',id==='s1'?'/':'/'+id);
 }
 function go2(u){
   document.getElementById('d-name').textContent=u.name||'—';
@@ -667,6 +668,18 @@ if(_u){
     go2(u);
   }catch(e){localStorage.removeItem('tmu');show('s1');}
 }else{show('s1');}
+history.replaceState({screen:document.querySelector('.screen.active').id},'',window.location.pathname);
+
+window.addEventListener('popstate',e=>{
+  const screens=document.querySelectorAll('.screen');
+  screens.forEach(s=>s.classList.remove('active'));
+  if(e.state&&e.state.screen){
+    document.getElementById(e.state.screen).classList.add('active');
+  }else{
+    const saved=localStorage.getItem('tmu');
+    document.getElementById(saved?'s2':'s1').classList.add('active');
+  }
+});
 
 // ── Admin panel ───────────────────────────────────────────────────
 let adminToken=localStorage.getItem('admin_token')||'';
