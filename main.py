@@ -26,7 +26,7 @@ OTP_EXPIRE = int(os.getenv("OTP_EXPIRE_MINUTES", "10"))
 def send_otp_email(to_email: str, otp: str, doctor_name: str):
     resend.api_key = os.getenv("RESEND_API_KEY")
     resend.Emails.send({
-        "from": "TrikMed <noreply@trikmed.com>",
+        "from": "TrikMed <onboarding@resend.dev>",
         "to": to_email,
         "subject": f"Your TrikMed verification code: {otp}",
         "html": f"""
@@ -174,11 +174,11 @@ async def stats(doctor_id: str = ""):
 async def admin_login(data: dict):
     if data.get("password") != ADMIN_PASSWORD:
         raise HTTPException(403, "Wrong password")
-    return {"token": "admin-" + ADMIN_PASSWORD[:8], "success": True}
+    return {"token": "admin-" + ADMIN_PASSWORD, "success": True}
 
 @app.get("/api/admin/all-recordings")
 async def all_recordings(token: str = ""):
-    if not token.startswith("admin-"):
+    if token != "admin-" + ADMIN_PASSWORD:
         raise HTTPException(403, "Unauthorized")
     async with aiosqlite.connect(DB) as db:
         rows = await (await db.execute("""
@@ -194,7 +194,7 @@ async def all_recordings(token: str = ""):
 
 @app.get("/api/admin/doctors")
 async def all_doctors(token: str = ""):
-    if not token.startswith("admin-"):
+    if token != "admin-" + ADMIN_PASSWORD:
         raise HTTPException(403, "Unauthorized")
     async with aiosqlite.connect(DB) as db:
         rows = await (await db.execute("""
@@ -210,7 +210,7 @@ async def all_doctors(token: str = ""):
 
 @app.get("/api/admin/export-csv")
 async def export_csv(token: str = ""):
-    if not token.startswith("admin-"):
+    if token != "admin-" + ADMIN_PASSWORD:
         raise HTTPException(403, "Unauthorized")
     import csv, io
     async with aiosqlite.connect(DB) as db:
