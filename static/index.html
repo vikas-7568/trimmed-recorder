@@ -486,7 +486,11 @@ function savedHtml(){
 }
 
 function play(id){
-  new Audio('/api/audio/'+id).play().catch(e=>alert('Cannot play: '+e.message));
+  const audio=new Audio('/api/audio/'+id);
+  audio.play().catch(e=>{
+    console.error('Play error:',e,'id:',id);
+    alert('Cannot play: '+e.message);
+  });
 }
 
 document.getElementById('c-saved').addEventListener('click',e=>{
