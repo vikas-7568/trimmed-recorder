@@ -281,7 +281,8 @@ async def all_doctors(token: str = ""):
             LEFT JOIN recordings r ON s.phone = r.doctor_phone
             GROUP BY s.id ORDER BY actual_count DESC
         """)).fetchall()
-        return [{"name":r[0],"phone":r[1],"spec":r[2],
+        return [{"name":r[0],"phone":r[1],
+                 "spec":r[2] or "Not specified",
                  "total":r[5],"joined":r[4]} for r in rows]
 
 @app.get("/api/admin/export-csv")
