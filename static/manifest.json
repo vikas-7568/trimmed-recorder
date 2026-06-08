@@ -1,13 +1,13 @@
 {
   "name": "TrikMed Voice Recorder",
-  "short_name": "TrikMed",
+  "short_name": "TrikMed Rec",
   "description": "Medical prescription voice data collection app",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0F1F3D",
-  "theme_color": "#C0392B",
+  "theme_color": "#0F1F3D",
   "lang": "hi",
   "icons": [
     {
